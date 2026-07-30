@@ -2,9 +2,10 @@
 
 Router has several responsibilities:
 
-* Configures the Envoy sidecar declared in
-  `manifests/ate-install/atenet-router.yaml` via xDS.
-* ext_proc server for the Envoy. To make the deployment and debugging easier, we will run this component together
+* Serves Envoy xDS configuration when `--anetrouter=envoy` (the default).
+  With `--anetrouter=agentgateway`, the sidecar uses a static ConfigMap and
+  atenet does not start an xDS server.
+* ext_proc server for the proxy. To make the deployment and debugging easier, we will run this component together
   with the router, but this will be split later into its own component.
   * ext_proc will call into the ATE gRPC API to get the set of relevant backends (specific the worker IP) and
     route the traffic accordingly
