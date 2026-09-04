@@ -75,6 +75,9 @@ type Interface interface {
 	// Fetches an actor by reference. Returns ErrNotFound if missing.
 	GetActor(ctx context.Context, actorRef resources.ActorRef) (*ateapipb.Actor, error)
 
+	// GetActorByUID fetches an actor by UID. Returns ErrNotFound if missing.
+	GetActorByUID(ctx context.Context, uid string) (*ateapipb.Actor, error)
+
 	// Lists actors in the given atespace (scoped scan), or across ALL atespaces if atespace is
 	// empty.
 	ListActors(ctx context.Context, atespace string, opts ListOptions) (ListResponse[*ateapipb.Actor], error)

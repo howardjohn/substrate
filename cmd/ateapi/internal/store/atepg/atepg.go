@@ -666,6 +666,22 @@ func (p *Persistence) GetActor(ctx context.Context, actorRef resources.ActorRef)
 	return out, nil
 }
 
+func (p *Persistence) GetActorByUID(ctx context.Context, uid string) (*ateapipb.Actor, error) {
+	var protoBytes []byte
+	err := p.pool.QueryRow(ctx, `SELECT proto FROM actors WHERE uid = $1`, uid).Scan(&protoBytes)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, store.ErrNotFound
+		}
+		return nil, fmt.Errorf("getting actor UID %s: %w", uid, err)
+	}
+	out := &ateapipb.Actor{}
+	if err := unmarshalStored(protoBytes, out); err != nil {
+		return nil, fmt.Errorf("unmarshaling actor: %w", err)
+	}
+	return out, nil
+}
+
 func (p *Persistence) UpdateActor(ctx context.Context, actorRef resources.ActorRef, precondition store.Precondition, mutate func(*ateapipb.Actor) error) (*ateapipb.Actor, error) {
 	if err := precondition.Validate(); err != nil {
 		return nil, err

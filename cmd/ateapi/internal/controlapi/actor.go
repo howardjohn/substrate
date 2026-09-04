@@ -196,6 +196,10 @@ func (s *ServiceImpl) GetActor(ctx context.Context, actorRef resources.ActorRef)
 	return s.store.GetActor(ctx, actorRef)
 }
 
+func (s *ServiceImpl) GetActorByUID(ctx context.Context, uid string) (*ateapipb.Actor, error) {
+	return s.store.GetActorByUID(ctx, uid)
+}
+
 func validateGetActorRequest(ctx context.Context, req *ateapipb.GetActorRequest) field.ErrorList {
 	// Call the generated validation.
 	op := operation.Operation{Type: operation.Create}
@@ -461,13 +465,13 @@ func (s *RPCService) ResumeActor(ctx context.Context, req *ateapipb.ResumeActorR
 	actorRef := resources.ActorRefFromObjectRef(req.GetActor())
 	setSpanActorRefAttributes(ctx, actorRef)
 
-	actor, resumed, err := s.actorWorkflow.ResumeActor(ctx, actorRef, req.GetBoot())
+	actor, resumed, err := s.actorWorkflow.ResumeActor(ctx, actorRef, req.GetBoot(), req.GetActorUid())
 	if err != nil {
 		if errors.Is(err, store.ErrVersionConflict) {
 			return nil, status.Error(codes.Aborted, "concurrent update conflict, please retry")
 		}
 		if errors.Is(err, store.ErrNotFound) {
-			return nil, status.Errorf(codes.NotFound, "Actor %s not found", actorRef)
+			return nil, status.Error(codes.NotFound, "Actor not found")
 		}
 		return nil, err
 	}
@@ -479,7 +483,13 @@ func (s *RPCService) ResumeActor(ctx context.Context, req *ateapipb.ResumeActorR
 func validateResumeActorRequest(ctx context.Context, req *ateapipb.ResumeActorRequest) field.ErrorList {
 	// Call the generated validation.
 	op := operation.Operation{Type: operation.Create}
-	return Validate_ResumeActorRequest(ctx, op, nil, req, nil)
+	errs := Validate_ResumeActorRequest(ctx, op, nil, req, nil)
+	if req.GetActor() == nil && req.GetActorUid() == "" {
+		errs = append(errs, field.Required(field.NewPath("actor"), "exactly one of actor or actor_uid is required"))
+	} else if req.GetActor() != nil && req.GetActorUid() != "" {
+		errs = append(errs, field.Forbidden(field.NewPath("actor_uid"), "cannot be set with actor"))
+	}
+	return errs
 }
 
 func (s *RPCService) SuspendActor(ctx context.Context, req *ateapipb.SuspendActorRequest) (*ateapipb.SuspendActorResponse, error) {

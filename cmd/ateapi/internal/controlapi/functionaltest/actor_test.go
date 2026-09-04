@@ -1756,6 +1756,11 @@ func TestResumeActor_VolumeCreationRetrySuccess(t *testing.T) {
 // 7. Verifies that the fake Atelet received the Restore call.
 // 8. Verifies that the actor state is updated to RUNNING.
 func TestResumeActor(t *testing.T) {
+	t.Run("name", func(t *testing.T) { testResumeActor(t, false) })
+	t.Run("uid", func(t *testing.T) { testResumeActor(t, true) })
+}
+
+func testResumeActor(t *testing.T, byUID bool) {
 	ns := namespaceForTest("ns-resume")
 	tc := setupTest(t, ns)
 	defer tc.cleanup()
@@ -1765,7 +1770,7 @@ func TestResumeActor(t *testing.T) {
 	podUID := createWorkerPod(t, tc, ns, "worker-1", "node1", "pool1")
 
 	name := "id1"
-	_, err := tc.client.CreateActor(context.Background(), &ateapipb.CreateActorRequest{Actor: &ateapipb.Actor{
+	created, err := tc.client.CreateActor(context.Background(), &ateapipb.CreateActorRequest{Actor: &ateapipb.Actor{
 		Metadata:      &ateapipb.ResourceMetadata{Atespace: testAtespace, Name: name},
 		ActorTemplate: &ateapipb.ObjectRef{Atespace: testAtespace, Name: "tmpl1"},
 	}})
@@ -1773,11 +1778,18 @@ func TestResumeActor(t *testing.T) {
 		t.Fatalf("CreateActor failed: %v", err)
 	}
 
-	_, err = tc.client.ResumeActor(context.Background(), &ateapipb.ResumeActorRequest{
-		Actor: &ateapipb.ObjectRef{Atespace: testAtespace, Name: name},
-	})
+	req := &ateapipb.ResumeActorRequest{Actor: &ateapipb.ObjectRef{Atespace: testAtespace, Name: name}}
+	if byUID {
+		req = &ateapipb.ResumeActorRequest{ActorUid: created.GetMetadata().GetUid()}
+	}
+	_, err = tc.client.ResumeActor(context.Background(), req)
 	if err != nil {
 		t.Fatalf("ResumeActor failed: %v", err)
+	}
+
+	again, err := tc.client.ResumeActor(context.Background(), req)
+	if err != nil || again.GetResumed() || again.GetActor().GetMetadata().GetUid() != created.GetMetadata().GetUid() {
+		t.Fatalf("repeated resume = %v, %v", again, err)
 	}
 
 	if !tc.fakeAtelet.RestoreCalled {
@@ -3457,5 +3469,27 @@ func TestDeleteActor_ReleasesAnAssignmentTheActorDoesNotReference(t *testing.T) 
 	}
 	if got := worker.GetStatus().GetAllocated().GetActors(); got != 0 {
 		t.Errorf("worker still books %d actors after the Actor was deleted, want 0", got)
+	}
+}
+
+func TestResumeActor_UIDValidation(t *testing.T) {
+	tc := setupTest(t, namespaceForTest("ns-resume-uid-validation"))
+	defer tc.cleanup()
+	for _, tt := range []struct {
+		name string
+		req  *ateapipb.ResumeActorRequest
+		code codes.Code
+	}{
+		{"missing", &ateapipb.ResumeActorRequest{}, codes.InvalidArgument},
+		{"both", &ateapipb.ResumeActorRequest{Actor: &ateapipb.ObjectRef{Atespace: testAtespace, Name: "id1"}, ActorUid: "uid"}, codes.InvalidArgument},
+		{"unknown", &ateapipb.ResumeActorRequest{ActorUid: "unknown"}, codes.NotFound},
+		{"invalid ref", &ateapipb.ResumeActorRequest{Actor: &ateapipb.ObjectRef{Name: "id1"}}, codes.InvalidArgument},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := tc.client.ResumeActor(context.Background(), tt.req)
+			if status.Code(err) != tt.code {
+				t.Fatalf("got %v, want %v", err, tt.code)
+			}
+		})
 	}
 }

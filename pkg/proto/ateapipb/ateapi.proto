@@ -1354,7 +1354,8 @@ message PauseActorResponse {
 }
 
 message ResumeActorRequest {
-  // +k8s:required
+  // Select the actor by name and atespace. Exactly one of actor or actor_uid is required.
+  // +k8s:optional
   // +k8s:subfield(atespace)=+k8s:required
   ObjectRef actor = 1;
 
@@ -1362,6 +1363,10 @@ message ResumeActorRequest {
   //
   // +k8s:optional
   bool boot = 2;
+
+  // Select the actor by UID instead of name and atespace.
+  // +k8s:optional
+  string actor_uid = 3;
 }
 
 message ResumeActorResponse {
